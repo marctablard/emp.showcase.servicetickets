@@ -117,6 +117,20 @@ export function TicketCard({ className, title, items: customItems, ...props }: T
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const refreshTickets = React.useCallback(async () => {
+    if (customItems && customItems.length > 0) return;
+    try {
+      setIsLoading(true);
+      const data = await fetchServiceTickets();
+      setRawTickets(data);
+      setItems(mapTickets(data));
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load tickets');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [customItems, mapTickets]);
+
   // Get the appropriate status badge variant
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -200,7 +214,17 @@ export function TicketCard({ className, title, items: customItems, ...props }: T
                   </Badge>
                 </TableCell>
                 <TableCell className="px-2 py-4 font-medium">
-                  <UiLink type="Link" href={`/account/tickets/${item.id}`} variant="primary" size="m">
+                  <UiLink
+                    type="Button"
+                    href="#"
+                    variant="primary"
+                    size="m"
+                    onClick={() => {
+                      const t = rawTickets.find((rt) => rt.TicketID === item.id) || null;
+                      setSelectedTicket(t);
+                      setDialogOpen(true);
+                    }}
+                  >
                     {item.ticketName || item.ticketNumber}
                   </UiLink>
                 </TableCell>
@@ -227,7 +251,12 @@ export function TicketCard({ className, title, items: customItems, ...props }: T
       />
       {/* Always show a separate "New Service Ticket" button below the list */}
       <div className="mt-2 flex justify-end">
-        <SupportTicketDialog ticket={null} />
+        <SupportTicketDialog
+          ticket={null}
+          onSubmit={() => {
+            void refreshTickets();
+          }}
+        />
       </div>
     </DashboardCard>
   );

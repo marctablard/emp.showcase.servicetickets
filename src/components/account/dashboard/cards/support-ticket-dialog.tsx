@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useCustomer } from '@/hooks/customer/useCustomer';
-import { fetchOrders } from '@/lib/client/orders';
+import { fetchOrderById, fetchOrders } from '@/lib/client/orders';
 import type { RawServiceTicket, ServiceTicketSubject } from '@/lib/client/servicetickets';
 import { createServiceTicket, fetchServiceTicketSubjects } from '@/lib/client/servicetickets';
 import type { SearchResult } from '@/platform/services/model/common';
@@ -61,11 +61,13 @@ export function SupportTicketDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
   const isViewMode = !!ticket; // read-only when viewing an existing ticket
+  const [productName, setProductName] = useState<string>('');
+  const [productOptions, setProductOptions] = useState<Product[]>([]);
 
   useEffect(() => {
     if (ticket) {
       setTicketId(ticket.TicketID || '');
-      setTicketName(ticket.Ticketame?.en || '');
+      setTicketName(ticket.TicketName || '');
       setStatus((ticket.Status || 'open').toLowerCase());
       setOrderId(ticket.OrderID || '');
       setOwnerId(ticket.OwnerID || '');
@@ -94,29 +96,46 @@ export function SupportTicketDialog({
     }
   }, [customer, isViewMode]);
 
+  // Fetch product name in view mode
+  useEffect(() => {
+    let cancelled = false;
+    async function loadProductName(pid: string) {
+      try {
+        const res = await fetch(`/api/products/${encodeURIComponent(pid)}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const product = (await res.json()) as Product | undefined;
+        if (!cancelled) {
+          const name = typeof product?.name === 'string' ? product?.name : product?.name?.en || product?.id || '';
+          setProductName(name || '');
+        }
+      } catch {
+        if (!cancelled) setProductName('');
+      }
+    }
+    if (isViewMode && productId) {
+      setProductName('');
+      loadProductName(productId);
+    } else {
+      setProductName('');
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [isViewMode, productId]);
+
   // Load recent orders and products for dropdowns when creating a new ticket
   useEffect(() => {
     if (isViewMode) return;
     let cancelled = false;
     (async () => {
       try {
-        const [ordersResp, productsResp, subjectsResp] = await Promise.all([
-          fetchOrders(10, 0),
-          // Use search API to get first 10 products
-          fetch('/api/search?size=10', { cache: 'no-store' }).then(
-            async (r) => (await r.json()) as SearchResult<Product>,
-          ),
-          fetchServiceTicketSubjects(),
-        ]);
+        const [ordersResp, subjectsResp] = await Promise.all([fetchOrders(10, 0), fetchServiceTicketSubjects()]);
         if (cancelled) return;
         setRecentOrders(Array.isArray(ordersResp) ? ordersResp : []);
-        const productItems = Array.isArray(productsResp?.items) ? productsResp.items : [];
-        setRecentProducts(productItems);
         setSubjects(Array.isArray(subjectsResp) ? subjectsResp : []);
       } catch (_e) {
         if (cancelled) return;
         setRecentOrders([]);
-        setRecentProducts([]);
         setSubjects([]);
       }
     })();
@@ -124,6 +143,36 @@ export function SupportTicketDialog({
       cancelled = true;
     };
   }, [isViewMode]);
+
+  // When order changes in create mode, load its products for the dropdown
+  useEffect(() => {
+    if (isViewMode) return;
+    let cancelled = false;
+    async function loadProductsFromOrder(oid: string) {
+      try {
+        const order = await fetchOrderById(oid);
+        if (cancelled) return;
+        const items = Array.isArray(order?.items) ? order.items : [];
+        const products: Product[] = items.map((item) => ({
+          id: item.productId,
+          sku: item.productId,
+          name: item.name || item.productId,
+        })) as unknown as Product[];
+        setProductOptions(products);
+      } catch {
+        if (!cancelled) setProductOptions([]);
+      }
+    }
+    if (orderId) {
+      setProductOptions([]);
+      loadProductsFromOrder(orderId);
+    } else {
+      setProductOptions([]);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [isViewMode, orderId]);
 
   const statusBadge = useMemo(() => {
     const normalized = (status || 'open').toLowerCase();
@@ -268,16 +317,19 @@ export function SupportTicketDialog({
             <div className="grid gap-2">
               <label htmlFor="productId">Product</label>
               {isViewMode ? (
-                <div className="text-base font-medium">{productId || '—'}</div>
+                <div className="text-base font-medium">
+                  {productName || productId || '—'}
+                  {productName && productId ? <div className="text-sm text-neutral-500">{productId}</div> : null}
+                </div>
               ) : (
                 <Select value={productId} onValueChange={setProductId}>
                   <SelectTrigger id="productId">
                     <SelectValue placeholder="Select a product" />
                   </SelectTrigger>
                   <SelectContent>
-                    {recentProducts.slice(0, 10).map((p) => (
+                    {productOptions.slice(0, 50).map((p) => (
                       <SelectItem key={p.id} value={p.id} className="mx-1">
-                        {typeof p.name === 'string' ? p.name : p.name?.en || p.id}
+                        {typeof p.name === 'string' ? p.name : (p as any)?.name?.en || p.id}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -289,7 +341,9 @@ export function SupportTicketDialog({
             <div className="grid gap-2">
               <label htmlFor="subjectId">Subject *</label>
               {isViewMode ? (
-                <div className="text-base font-medium">{subjectId || '—'}</div>
+                <div className="text-base font-medium">
+                  {ticket?.SubjectName?.en || ticket?.SubjectName?.de || subjectId || '—'}
+                </div>
               ) : (
                 <Select value={subjectId} onValueChange={setSubjectId}>
                   <SelectTrigger id="subjectId">

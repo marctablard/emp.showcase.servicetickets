@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type EmporixApiInvoker from '@/platform/integrations/emporix/common/impl/EmporixApiInvoker';
+import type { EmporixCustomerApi } from '@/platform/integrations/emporix/customer/EmporixCustomerApi';
 import type { CustomerService } from '@/platform/services/customer/CustomerService';
-
-const SERVICE_TICKETS_ENDPOINT = 'https://hook.emporix-cop.integromat.celonis.com/5k2if5sqjcj78cpii352vk1ktlqc1t60';
 
 const CREATE_SERVICE_TICKET_ENDPOINT =
   'https://hook.emporix-cop.integromat.celonis.com/eo3zshxuv7jj7n94ufa2efr1b9qg4wgb';
@@ -15,16 +15,63 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const res = await fetch(SERVICE_TICKETS_ENDPOINT, {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customerID: currentCustomer.id }),
-      cache: 'no-store',
-    });
+    const api = globalThis.EMP.platform.server.get<EmporixApiInvoker>('EmporixApiInvoker');
+    const config = globalThis.EMP.platform.server.get('EmporixConfig') as { tenant: string };
+
+    // Fetch raw Emporix customer profile to read customerNumber
+    const customerApi = globalThis.EMP.platform.server.get<EmporixCustomerApi>('EmporixCustomerApi');
+    const profile = await customerApi.getCustomerProfile();
+    const customerNumber = profile?.customerNumber || '';
+    const customerIdentifier = customerNumber || currentCustomer.id;
+
+    const path = `schema/${config.tenant}/custom-entities/SERVICETICKETS/instances`;
+    const q = `mixins.ticketinfo.ticketcustomer:${customerIdentifier}`;
+    const urlWithQuery = `${path}?q=${encodeURIComponent(q)}`;
+
+    const res = await api.authenticatedFetch(
+      urlWithQuery,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'Accept-Language': '*',
+        },
+        cache: 'no-store',
+      },
+      'service',
+      { scopes: ['schema.custominstance_read'] },
+    );
+
     if (!res.ok) {
       return NextResponse.json({ error: 'Upstream error' }, { status: res.status });
     }
-    const data = await res.json();
+
+    const instances = (await res.json()) as Array<any>;
+
+    const data = Array.isArray(instances)
+      ? instances.map((it) => {
+          const info = it?.mixins?.ticketinfo || {};
+          return {
+            Status: info.ticketstatus ?? 'open',
+            OrderID: info.ticketorder ?? null,
+            OwnerID: info.ticketowner ?? null,
+            TicketID: it?.id ?? '',
+            TicketName: it?.name?.en ?? it?.name?.de ?? it?.id ?? '',
+            ProductID: info.ticketproduct ?? null,
+            SubjectID: info.ticketsubject ?? null,
+            CustomerID: info.ticketcustomer ?? null,
+            Description: {
+              en: info.ticketdescription ?? undefined,
+              de: info.ticketdescription ?? undefined,
+            },
+            SubjectName: {
+              en: undefined,
+              de: undefined,
+            },
+          };
+        })
+      : [];
+
     return NextResponse.json(data);
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -42,22 +89,59 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Subject and description are required' }, { status: 400 });
     }
 
-    const res = await fetch(CREATE_SERVICE_TICKET_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      cache: 'no-store',
-    });
+    // Get DI services
+    const api = globalThis.EMP.platform.server.get<EmporixApiInvoker>('EmporixApiInvoker');
+    const config = globalThis.EMP.platform.server.get('EmporixConfig') as { tenant: string };
+    const customerApi = globalThis.EMP.platform.server.get<EmporixCustomerApi>('EmporixCustomerApi');
 
-    if (!res.ok) {
+    // Determine customer number for ticketcustomer
+    const profile = await customerApi.getCustomerProfile();
+    const customerNumber = profile?.customerNumber;
+
+    // Generate TicketID and TicketName
+    const guid = crypto.randomUUID().replace(/-/g, '');
+    const ticketId = `ST-${guid}`;
+    const ticketName = ticketId.substring(0, 10);
+
+    // Build payload
+    const payload = {
+      name: {
+        en: ticketName,
+      },
+      mixins: {
+        ticketinfo: {
+          ticketcustomer: body.customerId || customerNumber || '',
+          ticketdescription: body.descriptionEn,
+          ticketowner: '',
+          ticketstatus: 'open',
+          ticketsubject: body.subjectId,
+          ...(body.orderId ? { ticketorder: body.orderId } : {}),
+          ...(body.productId ? { ticketproduct: body.productId } : {}),
+        },
+      },
+    };
+
+    const putUrl = `schema/${config.tenant}/custom-entities/SERVICETICKETS/instances/${encodeURIComponent(ticketId)}`;
+
+    const res = await api.authenticatedFetch(
+      putUrl,
+      {
+        method: 'PUT',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+      'service',
+      { scopes: ['schema.custominstance_manage'] },
+    );
+
+    if (!res.ok && res.status !== 204 && res.status !== 201) {
       return NextResponse.json({ error: 'Upstream error' }, { status: res.status });
     }
 
-    const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json({ id: ticketId, name: { en: ticketName } }, { status: res.status === 201 ? 201 : 200 });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('Failed to create service ticket:', e);

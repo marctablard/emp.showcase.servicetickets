@@ -1,21 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const SERVICE_TICKET_SUBJECTS_ENDPOINT =
-  'https://hook.emporix-cop.integromat.celonis.com/4v3rxbsczh6zhostyfhcck5tfgb3yoqa';
+import type EmporixApiInvoker from '@/platform/integrations/emporix/common/impl/EmporixApiInvoker';
 
 export async function GET(_request: NextRequest): Promise<NextResponse> {
   try {
-    const res = await fetch(SERVICE_TICKET_SUBJECTS_ENDPOINT, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    });
+    const api = globalThis.EMP.platform.server.get<EmporixApiInvoker>('EmporixApiInvoker');
+
+    const res = await api.authenticatedFetch(
+      `schema/${globalThis.EMP.platform.server.get('EmporixConfig').tenant}/custom-entities/SERVICESUBJECTS/instances`,
+      {
+        method: 'GET',
+        headers: { Accept: 'application/json', 'Accept-Language': '*' },
+        cache: 'no-store',
+      },
+      'service',
+      { scopes: ['schema.custominstance_read'] },
+    );
 
     if (!res.ok) {
       return NextResponse.json({ error: 'Upstream error' }, { status: res.status });
     }
 
-    const data = await res.json();
+    const instances = (await res.json()) as Array<any>;
+
+    const data = Array.isArray(instances)
+      ? instances.map((it) => ({
+          id: it?.id,
+          name: it?.name || {},
+        }))
+      : [];
+
     return NextResponse.json(data);
   } catch (e) {
     // eslint-disable-next-line no-console
