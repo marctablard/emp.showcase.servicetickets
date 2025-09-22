@@ -59,7 +59,7 @@ export function TicketCard({ className, title, items: customItems, ...props }: T
   const mapTickets = React.useCallback(
     (raw: RawServiceTicket[]): TicketItem[] => {
       const useGerman = locale.startsWith('de');
-      return raw.map((ticket) => {
+      const mapped = raw.map((ticket) => {
         const normalizedStatus = (ticket.Status || 'open').trim().toLowerCase();
         const status: TicketItem['status'] =
           normalizedStatus === 'open'
@@ -74,16 +74,19 @@ export function TicketCard({ className, title, items: customItems, ...props }: T
           : ticket.SubjectName.en || ticket.Description.en || ticket.SubjectName.de || ticket.Description.de || '—';
         const preferredName = ticket.TicketName || ticket.TicketID;
         const priority: TicketItem['priority'] = status === 'open' ? 'high' : status === 'pending' ? 'medium' : 'low';
+        const date = ticket.CreatedAt || new Date().toISOString();
         return {
           id: ticket.TicketID,
           ticketNumber: ticket.TicketID,
           ticketName: preferredName,
           subject,
           status,
-          date: new Date().toISOString(),
+          date,
           priority,
         };
       });
+      mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      return mapped;
     },
     [locale],
   );

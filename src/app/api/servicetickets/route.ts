@@ -65,6 +65,7 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
               en: undefined,
               de: undefined,
             },
+            CreatedAt: it?.metadata?.createdAt ?? undefined,
           };
         })
       : [];

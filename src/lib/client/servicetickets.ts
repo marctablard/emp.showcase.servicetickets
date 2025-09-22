@@ -11,6 +11,7 @@ export type RawServiceTicket = {
   CustomerID: string | null;
   Description: { de?: string; en?: string };
   SubjectName: { de?: string; en?: string };
+  CreatedAt?: string;
 };
 
 export type ServiceTicketSubject = {
