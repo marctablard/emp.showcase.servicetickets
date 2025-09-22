@@ -4,9 +4,10 @@ import type EmporixApiInvoker from '@/platform/integrations/emporix/common/impl/
 export async function GET(_request: NextRequest): Promise<NextResponse> {
   try {
     const api = globalThis.EMP.platform.server.get<EmporixApiInvoker>('EmporixApiInvoker');
+    const config = globalThis.EMP.platform.server.get('EmporixConfig') as { tenant: string };
 
     const res = await api.authenticatedFetch(
-      `schema/${globalThis.EMP.platform.server.get('EmporixConfig').tenant}/custom-entities/SERVICESUBJECTS/instances`,
+      `schema/${config.tenant}/custom-entities/SERVICESUBJECTS/instances`,
       {
         method: 'GET',
         headers: { Accept: 'application/json', 'Accept-Language': '*' },
