@@ -3,9 +3,6 @@ import type EmporixApiInvoker from '@/platform/integrations/emporix/common/impl/
 import type { EmporixCustomerApi } from '@/platform/integrations/emporix/customer/EmporixCustomerApi';
 import type { CustomerService } from '@/platform/services/customer/CustomerService';
 
-const CREATE_SERVICE_TICKET_ENDPOINT =
-  'https://hook.emporix-cop.integromat.celonis.com/eo3zshxuv7jj7n94ufa2efr1b9qg4wgb';
-
 export async function GET(_request: NextRequest): Promise<NextResponse> {
   try {
     const customerService = globalThis.EMP.platform.server.get<CustomerService>('CustomerService');
@@ -74,7 +71,6 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(data);
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.error('Failed to fetch service tickets:', e);
     return NextResponse.json({ error: 'Failed to fetch service tickets' }, { status: 500 });
   }
@@ -143,7 +139,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ id: ticketId, name: { en: ticketName } }, { status: res.status === 201 ? 201 : 200 });
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.error('Failed to create service ticket:', e);
     return NextResponse.json({ error: 'Failed to create service ticket' }, { status: 500 });
   }

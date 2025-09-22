@@ -6,14 +6,12 @@ import { HelpingHand } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/dashboard-badge';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useCustomer } from '@/hooks/customer/useCustomer';
 import { fetchOrderById, fetchOrders } from '@/lib/client/orders';
 import type { RawServiceTicket, ServiceTicketSubject } from '@/lib/client/servicetickets';
 import { createServiceTicket, fetchServiceTicketSubjects } from '@/lib/client/servicetickets';
-import type { SearchResult } from '@/platform/services/model/common';
 import type { Order } from '@/platform/services/model/order/order';
 import type { Product } from '@/platform/services/model/product';
 
@@ -56,7 +54,6 @@ export function SupportTicketDialog({
   const [customerId, setCustomerId] = useState<string>('');
   const [descriptionEn, setDescriptionEn] = useState<string>('');
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
-  const [recentProducts, setRecentProducts] = useState<Product[]>([]);
   const [subjects, setSubjects] = useState<ServiceTicketSubject[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>('');

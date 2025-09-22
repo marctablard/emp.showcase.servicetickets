@@ -38,7 +38,6 @@ interface TicketCardProps extends Omit<DashboardCardProps, 'children'> {
 
 export function TicketCard({ className, title, items: customItems, ...props }: TicketCardProps) {
   const t = useTranslations('account.Tickets');
-  const tAccount = useTranslations('account');
   const locale = useLocale();
 
   const { form } = useValidator('TicketSearchValidationService', {
@@ -57,41 +56,37 @@ export function TicketCard({ className, title, items: customItems, ...props }: T
   const [dialogOpen, setDialogOpen] = React.useState<boolean>(false);
   const [selectedTicket, setSelectedTicket] = React.useState<RawServiceTicket | null>(null);
 
-  const mapStatus = (statusRaw: string): TicketItem['status'] => {
-    const normalized = statusRaw.trim().toLowerCase();
-    if (normalized === 'open') return 'open';
-    if (normalized === 'in progress' || normalized === 'pending') return 'pending';
-    if (normalized === 'closed' || normalized === 'resolved') return 'closed';
-    return 'open';
-  };
-
-  const derivePriority = (status: TicketItem['status']): TicketItem['priority'] => {
-    if (status === 'open') return 'high';
-    if (status === 'pending') return 'medium';
-    return 'low';
-  };
-
-  const mapTickets = (raw: RawServiceTicket[]): TicketItem[] => {
-    const useGerman = locale.startsWith('de');
-    return raw.map((ticket) => {
-      const status = mapStatus(ticket.Status || 'open');
-      const subject = useGerman
-        ? ticket.SubjectName.de || ticket.Description.de || ticket.SubjectName.en || ticket.Description.en || '—'
-        : ticket.SubjectName.en || ticket.Description.en || ticket.SubjectName.de || ticket.Description.de || '—';
-      const preferredName = ticket.TicketName || ticket.TicketID;
-      return {
-        id: ticket.TicketID,
-        ticketNumber: ticket.TicketID,
-        // Prefer API name.en, then fallbacks outlined above
-        ticketName: preferredName,
-        subject,
-        status,
-        // No date provided by API; use current date as placeholder to keep UI stable
-        date: new Date().toISOString(),
-        priority: derivePriority(status),
-      };
-    });
-  };
+  const mapTickets = React.useCallback(
+    (raw: RawServiceTicket[]): TicketItem[] => {
+      const useGerman = locale.startsWith('de');
+      return raw.map((ticket) => {
+        const normalizedStatus = (ticket.Status || 'open').trim().toLowerCase();
+        const status: TicketItem['status'] =
+          normalizedStatus === 'open'
+            ? 'open'
+            : normalizedStatus === 'in progress' || normalizedStatus === 'pending'
+              ? 'pending'
+              : normalizedStatus === 'closed' || normalizedStatus === 'resolved'
+                ? 'closed'
+                : 'open';
+        const subject = useGerman
+          ? ticket.SubjectName.de || ticket.Description.de || ticket.SubjectName.en || ticket.Description.en || '—'
+          : ticket.SubjectName.en || ticket.Description.en || ticket.SubjectName.de || ticket.Description.de || '—';
+        const preferredName = ticket.TicketName || ticket.TicketID;
+        const priority: TicketItem['priority'] = status === 'open' ? 'high' : status === 'pending' ? 'medium' : 'low';
+        return {
+          id: ticket.TicketID,
+          ticketNumber: ticket.TicketID,
+          ticketName: preferredName,
+          subject,
+          status,
+          date: new Date().toISOString(),
+          priority,
+        };
+      });
+    },
+    [locale],
+  );
 
   React.useEffect(() => {
     if (customItems && customItems.length > 0) return;

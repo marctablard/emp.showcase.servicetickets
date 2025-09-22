@@ -31,7 +31,6 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(data);
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.error('Failed to fetch service ticket subjects:', e);
     return NextResponse.json({ error: 'Failed to fetch service ticket subjects' }, { status: 500 });
   }
