@@ -120,26 +120,49 @@ export function SupportTicketDialog({
     };
   }, [isViewMode, productId]);
 
-  // Load recent orders and products for dropdowns when creating a new ticket
+  // Load subjects always (for view and create). Load recent orders only in create mode
   useEffect(() => {
-    if (isViewMode) return;
     let cancelled = false;
     (async () => {
       try {
-        const [ordersResp, subjectsResp] = await Promise.all([fetchOrders(10, 0), fetchServiceTicketSubjects()]);
-        if (cancelled) return;
-        setRecentOrders(Array.isArray(ordersResp) ? ordersResp : []);
-        setSubjects(Array.isArray(subjectsResp) ? subjectsResp : []);
+        const subjectsResp = await fetchServiceTicketSubjects();
+        if (!cancelled) setSubjects(Array.isArray(subjectsResp) ? subjectsResp : []);
       } catch (_e) {
-        if (cancelled) return;
-        setRecentOrders([]);
-        setSubjects([]);
+        if (!cancelled) setSubjects([]);
       }
     })();
+
+    if (!isViewMode) {
+      (async () => {
+        try {
+          const ordersResp = await fetchOrders(10, 0);
+          if (!cancelled) setRecentOrders(Array.isArray(ordersResp) ? ordersResp : []);
+        } catch (_e) {
+          if (!cancelled) setRecentOrders([]);
+        }
+      })();
+    } else {
+      setRecentOrders([]);
+    }
+
     return () => {
       cancelled = true;
     };
   }, [isViewMode]);
+
+  // Resolve subject display name for view mode
+  const subjectDisplayName = useMemo(() => {
+    const id = isViewMode ? ticket?.SubjectID || subjectId : subjectId;
+    if (!id) return '';
+    const match = subjects.find((s) => s.id === id);
+    if (match) {
+      return typeof match.name === 'string'
+        ? (match.name as unknown as string)
+        : match.name?.en || match.name?.de || id;
+    }
+    // Fallback to any provided name on the ticket
+    return (ticket?.SubjectName?.en || ticket?.SubjectName?.de || id) ?? id;
+  }, [isViewMode, subjects, subjectId, ticket]);
 
   // When order changes in create mode, load its products for the dropdown
   useEffect(() => {
@@ -338,9 +361,7 @@ export function SupportTicketDialog({
             <div className="grid gap-2">
               <label htmlFor="subjectId">Subject *</label>
               {isViewMode ? (
-                <div className="text-base font-medium">
-                  {ticket?.SubjectName?.en || ticket?.SubjectName?.de || subjectId || '—'}
-                </div>
+                <div className="text-base font-medium">{subjectDisplayName || '—'}</div>
               ) : (
                 <Select value={subjectId} onValueChange={setSubjectId}>
                   <SelectTrigger id="subjectId">
